@@ -1,0 +1,1046 @@
+---
+title: "Hands on 1"
+author: "Maider Fernandez de Mendiola (maider.ferenandezdemendiola01@estudiant.upf.edu)"
+date: "Last update: `r format(Sys.time(), '%d %B, %Y')`"      
+output:
+  html_document:
+    toc: true
+    fig_caption: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Analysis of the Heart Disease Dataset
+
+Load the data from [here](https://raw.githubusercontent.com/jpinero/DMI_2021/main/datasets/heart_disease_dataset.csv), and the description is [here](https://raw.githubusercontent.com/jpinero/DMI_2021/main/datasets/heart_disease_description.txt). The original dataset comes from [here](https://archive.ics.uci.edu/ml/datasets/Heart+Disease) and corresponds to the [processed cleveland data](https://archive.ics.uci.edu/ml/machine-learning-databases/heart-disease/processed.cleveland.data)
+
+```{r}
+## Libraries needed
+library(ggplot2)
+library(dplyr)
+library(vcd)
+```
+
+```{r}
+heart_disease_dataset <- read.csv("data/heart_disease_dataset.csv", sep="")
+
+```
+
+## Perform an EDA on the dataset
+
+#### General EDA
+
+Number of individuals x Number of variables (features)
+
+```{r}
+# Number of variables
+dim(heart_disease_dataset)  
+
+#Types of variables 
+str(heart_disease_dataset)
+
+```
+
+### Diagnosis of Heart Disease (num)
+
+It is integer valued from 0 (no presence) to 4. Experiments with the Cleveland database have concentrated on simply attempting to distinguish presence (values 1,2,3,4) from absence (value 0).
+
+The diagnosis is based on the angiographic disease status.
+
+-   Value 0: \< 50% diameter narrowing. Absence
+
+-   Value 1: \> 50% diameter narrowing. Presence.
+
+-   Values 2-4: Presence.
+
+```{r}
+heart_disease_dataset$num <- factor(heart_disease_dataset$num,
+                                        levels = c(0,1,2,3,4),
+                                        labels = c("Absence", "Presence","Presence","Presence","Presence"))
+table(heart_disease_dataset$num, useNA = "ifany")
+barplot(table(heart_disease_dataset$num, useNA = "ifany"))
+```
+
+#### Analysis on Age
+
+```{r}
+# Check for missing values
+sum(is.na(heart_disease_dataset$age))
+
+summary(heart_disease_dataset$age)
+#Visualize the variable to find outliers
+hist(heart_disease_dataset$age, main = "Age distribution", xlab = "years")
+boxplot(heart_disease_dataset$age, main="Age distribution")
+
+```
+
+When performing the analysis on age we are able to see that there are no missing values as the minimum age is 29.00 and the maximum is 77.00.
+
+#### Analysis on sex
+
+In the general EDA we saw that sex was accounted as a continuous variable, we changed the variable to be a factor to perform the correct analysis.
+
+```{r}
+# Looking for missing values
+sum(is.na(heart_disease_dataset$sex))
+
+#Change the values 0 = Female and 1 = Male
+heart_disease_dataset$sex <- factor(heart_disease_dataset$sex,
+                                    levels = c(1, 0),
+                                    labels = c("Male", "Female"))
+table(heart_disease_dataset$sex, useNA = "ifany")
+barplot(table(heart_disease_dataset$sex, useNA = "ifany"))
+
+```
+
+In the analysis what we can see is that the study was not leveled, having more than double males than females.
+
+### Analysis on Chest Pain (cp)
+
+Chest pain type is represented as 1 = typical angina, 2 = atypical angina, 3 = non-anginal pain and 4 = asymptomatic. The numerical values were converted to categorical according to that representation.
+
+```{r}
+heart_disease_dataset$cp <- factor(heart_disease_dataset$cp, 
+                       levels = c(1, 2, 3, 4), 
+                       labels = c("Typical Angina", "Atypical Angina", 
+                                  "Non-Anginal Pain", "Asymptomatic"))
+table(heart_disease_dataset$cp, useNA = "ifany")
+barplot(table(heart_disease_dataset$cp, useNA = "ifany"))
+```
+
+Regarding the classification on chest pain, we can see how again it is not leveled having many more samples of asymptomatic and Non-anginal pain than of Typical Angina and Atypical Angina. This should be taken into account for further comparisons.
+
+### Analysis on Resting Blood Pressure (trestbps)
+
+```{r}
+# Checking for NAs
+table(is.na(heart_disease_dataset$trestbps)) #No NA's found
+# Analysis on the variable
+summary(heart_disease_dataset$trestbps)
+hist(heart_disease_dataset$trestbps, main = "Resting Blood Pressure", xlab = "mmHg")
+boxplot(heart_disease_dataset$trestbps, main="Resting Blood Pressure")
+```
+
+This variable represents the blood pressure of the samples upon arrival at the hospital, measured in mmHg. There are no missing values; however, the box plot reveals the presence of outliers.
+
+We decided to keep these outliers because, although a blood pressure of 200 mmHg is unusually elevated, it is possible. Additionally, since this data reflects the first measurement taken at the hospital, we cannot determine the condition of the patient when arrived.
+
+### Analysis on Serum cholesterol (chol)
+
+```{r}
+# Checking for NAs
+table(is.na(heart_disease_dataset$chol)) #No NA's found
+# Analysis on the variable
+summary(heart_disease_dataset$chol)
+hist(heart_disease_dataset$chol, main = "Cholesterol levels", xlab = "mg/dl")
+boxplot(heart_disease_dataset$chol, main="Cholesterol levels")
+
+# Removing outliers
+outliers_column<- (heart_disease_dataset$chol>=371)
+table(outliers_column) #with 371 as a threshold we have 5 outliers
+
+# Making a subset of our data to analyse cholesterol
+data_chol <- subset(heart_disease_dataset, heart_disease_dataset$chol <= 371)
+#performing the analysis for the new dataset which now has 298 observations
+table(is.na(data_chol$chol))
+summary(data_chol$chol)
+hist(data_chol$chol, main = "Cholesterol levels", xlab = "mg/dl")
+boxplot(data_chol$chol, main="Cholesterol levels")
+
+```
+
+This variable represents the serum cholesterol level of the individuals measured in mg/dl. There are no missing values; however, the box plot reveals the presence of outliers.
+
+In this case we have some non-realistic values. In order to determine a limit for outliers, to see what outliers should be deleted and which ones we although unusual should keep, we set the limit performing the next calculation: Quartile 3 + 1.5 x Interquartilic rank. Which gives a threshold of 371. Setting this limit, 5 observations were deleted. After this, we performed again the analysis. For further comparisons with this data set it should be taken into account we should use the "data_chol" data set created.
+
+### Analysis on Fasting Blood Sugar (fbs)
+
+If the fasting blood sugar is higher than 120 mg/dl the value will be 1, if not it will be 0.
+
+```{r}
+heart_disease_dataset$fbs <- factor(heart_disease_dataset$fbs, 
+                       levels = c(1, 0), 
+                       labels = c("High", "Low"))
+table(heart_disease_dataset$fbs, useNA = "ifany")
+barplot(table(heart_disease_dataset$fbs, useNA = "ifany"))
+```
+
+In this variable we can see we are not missing any data. We have two groups with very un-even sizes, having only 45 observations of high fasting blood sugar (\>120 mg/dl) and 258 for low fasting blood sugar (\<120 mg/dl).
+
+### Analysis on Resting Electrocardiographic Results (restecg)
+
+-   Value 0: normal
+
+-   Value 1: having ST-T wave abnormality (T wave inversions and/or ST elevation or depression of \> 0.05 mV)
+
+-   Value 2: showing probable or definite left ventricular hypertrophy by Estes' criteria
+
+```{r}
+heart_disease_dataset$restecg <- factor(heart_disease_dataset$restecg,
+                                        levels = c(0,1,2),
+                                        labels = c("Normal", "ST-T wave abnormality", "Left ventricular hypertrophy"))
+table(heart_disease_dataset$restecg, useNA = "ifany")
+barplot(table(heart_disease_dataset$restecg, useNA = "ifany"))
+```
+
+In this variable we have no missing data but again the groups show very different number of observations. In this case the group with ST-T wave abnormality is too small, only having 4 observations. In previous cases with un-leveled groups we did not make any changes because there were enough observations but in this case it is too low and 4 observations will not enable us to draw conclusions. For that reason we will create an other data set for further analysis without this 4 individuals.
+
+```{r}
+## Creating a subset without the ST-T wave abnormality subjects
+    # value 1 corresponds to ST-T wave abnormality
+data_restecg <- subset(heart_disease_dataset, heart_disease_dataset$restecg != "ST-T wave abnormality") 
+# Dropping unused factor levels
+data_restecg$restecg <- droplevels(data_restecg$restecg)
+# Analysis with the reduced dataset
+table(data_restecg$restecg, useNA = "ifany")
+barplot(table(data_restecg$restecg, useNA = "ifany"))
+```
+
+### Analysis on Maximum Heart Rate Achieved (thalach)
+
+```{r}
+table(is.na(heart_disease_dataset$thalach))
+
+summary(heart_disease_dataset$thalach)
+hist(heart_disease_dataset$thalach)
+boxplot(heart_disease_dataset$thalach)
+```
+
+In this analysis we can see what seems like an outlier. It is true that it could be a plaussible value for a heart rate but in rest, not for a maximum heart rate. Because of this, we though it may be an error in the dataset rather than a real extreme value. For that reason we again set a threshold regarding the interquartilic rank. Q1 -1.5 x IQR = 84.75. After that we created a new dataset to use in further analysis on Maximum heart Rate Achieved.
+
+```{r}
+# Making a subset of our data to analyse maximum heart rate achieved
+data_thalach <- subset(heart_disease_dataset, heart_disease_dataset$thalach >= 84.75)
+#performing the analysis for the new dataset which now has 302 observations
+table(is.na(data_thalach$thalach))
+summary(data_thalach$thalach)
+hist(data_thalach$thalach, main = "Maximum heart rate")
+boxplot(data_thalach$thalach, main="Maximum heart rate")
+```
+
+### Anaysis on exercise Induced Angina (exang)
+
+The Exercise induced angina is categorized as 1 for yes and 0 for no.
+
+```{r}
+heart_disease_dataset$exang <- factor(heart_disease_dataset$exang,
+                                        levels = c(0,1),
+                                        labels = c("No", "Yes"))
+table(heart_disease_dataset$exang, useNA = "ifany")
+barplot(table(heart_disease_dataset$exang, useNA = "ifany"))
+```
+
+In the analysis we can see how there is no missing data and we have to groups with different number of subjects.
+
+### ST Depression Induced by Exercise Relative to Rest (oldpeak)
+
+```{r}
+table(is.na(heart_disease_dataset$oldpeak))
+
+summary(heart_disease_dataset$oldpeak)
+hist(heart_disease_dataset$oldpeak, main = "ST Depression Induced by Exercise Relative to Rest", xlab="levels")
+boxplot(heart_disease_dataset$oldpeak, main="ST Depression Induced by Exercise Relative to Rest")
+```
+
+As there is no more description of this variable than the name, we are not able to decide whether the outliers are mistakes or could be real values. For that reason we decided to keep them but taking into account this fact.
+
+### Analysis on slope of the Peak Exercise ST Segment (slope)
+
+-   Value 1: upsloping
+
+-   Value 2: flat
+
+-   Value 3: downsloping
+
+```{r}
+heart_disease_dataset$slope <- factor(heart_disease_dataset$slope,
+                                        levels = c(1,2,3),
+                                        labels = c("Upsloping", "Flat","Downsloping"))
+table(heart_disease_dataset$slope, useNA = "ifany")
+barplot(table(heart_disease_dataset$slope, useNA = "ifany"))
+```
+
+After the analysis we can see there are three groups on this variable, with different number of subjects, being a big difference between "Upsloping" and "Flat" with "Downsloping". As there are only 21 individuals in this last group, but we will keep the variable as it is as it has enough individuals to perform later on analysis.
+
+### Analysis on number of major vessels colored by fluoroscopy (ca)
+
+We have values only from 0 to 3. For that reason we will categorize it even though it has numerical values.
+
+```{r}
+heart_disease_dataset$ca <- factor(heart_disease_dataset$ca)
+table(heart_disease_dataset$ca, useNA = "ifany")
+barplot(table(heart_disease_dataset$ca, useNA = "ifany"))
+```
+
+In this preliminar analysis we can see that there are 4 individuals from which we do not the number of main vessels, for this reason we will create a subset without them.
+
+```{r}
+## Creating a subset without the ? subjects
+data_ca <- subset(heart_disease_dataset, heart_disease_dataset$ca != "?")   
+
+#Performing the analysis with the reduced dataset
+data_ca$ca <- factor(data_ca$ca)
+table(data_ca$ca, useNA = "ifany")
+barplot(table(data_ca$ca, useNA = "ifany"))
+```
+
+### Analysis on thalassemia (thal)
+
+-   3 = normal
+
+-   6 = fixed defect
+
+-   7 = reversable defect
+
+```{r}
+heart_disease_dataset$thal <- factor(heart_disease_dataset$thal,
+                                        levels = c(3,6,7),
+                                        labels = c("Normal", "Fixed defect","Reversable defect"))
+table(heart_disease_dataset$thal, useNA = "ifany")
+barplot(table(heart_disease_dataset$thal, useNA = "ifany"))
+```
+
+There are 2 NA's so we will create an other subset from the data to eliminate this individuals when performing an analysis with this variable.
+
+```{r}
+## Creating a subset without the NA's
+data_thal <- subset(heart_disease_dataset, heart_disease_dataset$thal != "NA")   
+
+#Performing the analysis with the reduced dataset
+data_thal$thal <- factor(data_thal$thal)
+table(data_thal$thal, useNA = "ifany")
+barplot(table(data_thal$thal, useNA = "ifany"))
+```
+
+We can see three un-leveled groups, which makes sense as we would not expect many subjects with thalassemia.
+
+## Create visualizations in order to show which variables seem to be more associated with heart disease
+
+##### Age and Diagnosis of heart disease (num)
+
+```{r}
+# Descriptive analysis
+by(heart_disease_dataset$age, heart_disease_dataset$num,summary)
+boxplot(age ~ num, 
+        heart_disease_dataset, main='Boxplot Diagnosis and age',col=c('lightblue','lightcoral'))
+ggplot(data = heart_disease_dataset, aes(x = age, fill = num)) + 
+  geom_histogram(alpha = .2, position = "identity", color = "black", bins = 8) + labs(x = "Age", y = "Absolute frequency", title = "Diagnosis of heart disease on Age") +
+  scale_fill_manual(values = c('lightblue', 'lightcoral')) +
+  theme_light()
+
+## T-test
+#Checking normal distribution of the data
+shapiro.test(heart_disease_dataset$age[heart_disease_dataset$num=="Absence"]) #Follows a normal distribution
+shapiro.test(heart_disease_dataset$age[heart_disease_dataset$num=="Presence"]) # Does not follow a normal distribution
+#Checking the variance
+var.test(age~num,data=heart_disease_dataset) #no homogeneity of variances
+
+t.test(age~num,data=heart_disease_dataset,var.equal = FALSE) #there is statistical difference
+
+
+```
+
+We first performed a T-test, and even though both groups do not follow a normal distribution, we have more than 30 individuals in each group, 164 for absence and 139 for presence, allowing us to perform the test.
+
+From the T-test we can see there are statistical differences in age between both groups.
+
+##### Sex and Diagnosis of heart disease (num)
+
+```{r}
+# Absolute Frequences
+sex_Diagnosis_table<-table(heart_disease_dataset$num, heart_disease_dataset$sex)
+(sex_Diagnosis_table_total <- addmargins(sex_Diagnosis_table))
+barplot(sex_Diagnosis_table,
+        col = c('lightblue', 'lightcoral'),
+        beside = TRUE,
+        ylim = c(0, 150), ylab = "number of observations", main = "Diagnosis depending on sex");legend(x = "topright",legend = unique(heart_disease_dataset$num),  fill = c('lightblue', 'lightcoral'))
+
+#Relative Frequences tables
+(sex_Diagnosis_table_freqs <- prop.table(sex_Diagnosis_table))
+(sex_Diagnosis_table_freqs_total <- addmargins(sex_Diagnosis_table_freqs))
+barplot(sex_Diagnosis_table_freqs,
+        col = c('lightblue', 'lightcoral'),
+        beside = TRUE,
+        ylim = c(0, 1), ylab = "Proportion of observations", main = "Diagnosis depending on sex");legend(x = "topright",legend = unique(heart_disease_dataset$num),  fill = c('lightblue', 'lightcoral'))
+
+#Fisher test
+fisher.test(sex_Diagnosis_table, alternative = "two.sided") #Significative
+assocstats(sex_Diagnosis_table)
+```
+
+From the descriptive we could already see like it seemed to be some differences and this is confirmed by the Fisher test and the other parameters produced by the function assocstats.
+
+##### Chest pain (cp) and Diagnosis of heart disease (num)
+
+```{r}
+# Absolute Frequences
+cp_Diagnosis_table<-table(heart_disease_dataset$num, heart_disease_dataset$cp)
+(cp_Diagnosis_table_total <- addmargins(cp_Diagnosis_table))
+barplot(cp_Diagnosis_table,
+        col = c('lightblue', 'lightcoral'),
+        beside = TRUE,
+        ylim = c(0, 150), ylab = "number of observations", main = "Diagnosis depending on Chest pain");legend(x = "topright",legend = unique(heart_disease_dataset$num),  fill = c('lightblue', 'lightcoral'))
+
+#Relative Frequences tables
+(cp_Diagnosis_table_freqs <- prop.table(cp_Diagnosis_table))
+(cp_Diagnosis_table_freqs_total <- addmargins(cp_Diagnosis_table_freqs))
+barplot(cp_Diagnosis_table_freqs,
+        col = c('lightblue', 'lightcoral'),
+        beside = TRUE,
+        ylim = c(0, 1), ylab = "Proportion of observations", main = "Diagnosis depending on Chest pain");legend(x = "topright",legend = unique(heart_disease_dataset$num),  fill = c('lightblue', 'lightcoral'))
+
+#Fisher test
+fisher.test(cp_Diagnosis_table, alternative = "two.sided") #significative
+assocstats(cp_Diagnosis_table)
+#Chi-squared test
+res<-chisq.test(cp_Diagnosis_table)
+res
+res$observed
+res$expected
+res$residuals
+```
+
+As we see in the Chi-squared test, there are significant differences between groups of chest pain according to the diagnosis. Also looking at the residuals we can see that the asymptomatic group is the one which contributes the most to this chi-squared results.
+
+##### Resting blood pressure (trestbps) and Diagnosis of heart disease (num)
+
+```{r}
+# Descriptive analysis
+by(heart_disease_dataset$trestbps, heart_disease_dataset$num,summary)
+boxplot(trestbps ~ num, 
+        heart_disease_dataset, main='Boxplot Diagnosis and Resting Blood pressure',col=c('lightblue','lightcoral'))
+ggplot(data = heart_disease_dataset, aes(x = trestbps, fill = num)) + 
+  geom_histogram(alpha = .2, position = "identity", color = "black", bins = 8) + labs(x = "Resting blood pressure", y = "Absolute frequency", title = "Diagnosis of heart disease on Resting blood pressure") +
+  scale_fill_manual(values = c('lightblue', 'lightcoral')) +
+  theme_light()
+
+## T-test
+#Checking normal distribution of the data
+shapiro.test(heart_disease_dataset$trestbps[heart_disease_dataset$num=="Absence"]) #Does not follow a normal distribution
+shapiro.test(heart_disease_dataset$trestbps[heart_disease_dataset$num=="Presence"]) 
+#Does not follow a normal distribution
+#Checking the variance
+var.test(trestbps~num,data=heart_disease_dataset) #homogeneity of variances
+
+t.test(age~num,data=heart_disease_dataset,var.equal = TRUE) #there is statistical difference
+```
+
+Both variables do not follow a normal distribution but as mentioned with the age variable, we can perform a t-test as both groups have more than 30 individuals.
+
+##### Cholesterol levels (chol) and Diagnosis of heart disease (num)
+
+We need to remember for this analysis we have to do it with the subset for cholesterol we did (data_chol) that removed the outliers from the variable.
+
+```{r}
+# Descriptive analysis
+by(data_chol$chol, data_chol$num,summary)
+boxplot(chol ~ num, 
+        data_chol, main='Boxplot Diagnosis and Cholesterol levels',col=c('lightblue','lightcoral'))
+ggplot(data = data_chol, aes(x = chol, fill = num)) + 
+  geom_histogram(alpha = .2, position = "identity", color = "black", bins = 8) + labs(x = "Cholesterol levels", y = "Absolute frequency", title = "Diagnosis of heart disease on Cholesterol levels") +
+  scale_fill_manual(values = c('lightblue', 'lightcoral')) +
+  theme_light()
+
+## T-test
+#Checking normal distribution of the data
+shapiro.test(data_chol$chol[data_chol$num=="Absence"]) # Follows a normal distribution
+shapiro.test(data_chol$chol[data_chol$num=="Presence"]) # Follows a normal distribution
+#Checking the variance
+var.test(chol~num,data=data_chol) #Homogeneity of variances
+
+t.test(chol~num,data=data_chol,var.equal = TRUE) # There is statistical difference
+```
+
+There is an statistical significance regarding cholesterol levels and the diagnosis, with a threshold of 0.05.
+
+##### Fasting blood sugar (fbs) and Diagnosis of heart disease (num)
+
+```{r}
+# Absolute Frequences
+fbs_Diagnosis_table<-table(heart_disease_dataset$num, heart_disease_dataset$fbs)
+(fbs_Diagnosis_table_total <- addmargins(fbs_Diagnosis_table))
+barplot(fbs_Diagnosis_table,
+        col = c('lightblue', 'lightcoral'),
+        beside = TRUE,
+        ylim = c(0, 180), ylab = "Number of observations", main = "Diagnosis depending on Fasting blood sugar");legend(x = "topright",legend = unique(heart_disease_dataset$num),  fill = c('lightblue', 'lightcoral'))
+
+#Relative Frequences tables
+(fbs_Diagnosis_table_freqs <- prop.table(fbs_Diagnosis_table))
+(fbs_Diagnosis_table_freqs_total <- addmargins(fbs_Diagnosis_table_freqs))
+barplot(fbs_Diagnosis_table_freqs,
+        col = c('lightblue', 'lightcoral'),
+        beside = TRUE,
+        ylim = c(0, 1), ylab = "Proportion of observations", main = "Diagnosis depending on Fasting blood sugar");legend(x = "topright",legend = unique(heart_disease_dataset$num),  fill = c('lightblue', 'lightcoral'))
+
+#Fisher test
+fisher.test(fbs_Diagnosis_table, alternative = "two.sided") #significative
+assocstats(fbs_Diagnosis_table)
+```
+
+For this analysis we do not see any significant difference between the diagnosis and the fasting blood sugar.
+
+##### Resting electrocardiographic results (restecg) and Diagnosis of heart disease (num)
+
+For this variable we also have to remember we did a subset to take out one of the groups as it only had 4 individuals. So for this analysis the data set will be "data_restecg"
+
+```{r}
+# Absolute Frequences
+restecg_Diagnosis_table<-table(data_restecg$num,data_restecg$restecg)
+(restecg_Diagnosis_table_total <- addmargins(restecg_Diagnosis_table))
+barplot(restecg_Diagnosis_table,
+        col = c('lightblue', 'lightcoral'),
+        beside = TRUE,
+        ylim = c(0, 120), ylab = "number of observations", main = "Diagnosis depending on Resting electrocardiogrpahical results");legend(x = "topright",legend = unique(data_restecg$num),  fill = c('lightblue', 'lightcoral'))
+
+#Relative Frequences tables
+(restecg_Diagnosis_table_freqs <- prop.table(restecg_Diagnosis_table))
+(restecg_Diagnosis_table_freqs_total <- addmargins(restecg_Diagnosis_table_freqs))
+barplot(restecg_Diagnosis_table_freqs,
+        col = c('lightblue', 'lightcoral'),
+        beside = TRUE,
+        ylim = c(0, 1), ylab = "Proportion of observations", main = "Diagnosis depending on Resting electrocardiographical results");legend(x = "topright",legend = unique(data_restecg$num),  fill = c('lightblue', 'lightcoral'))
+
+#Fisher test
+fisher.test(restecg_Diagnosis_table, alternative = "two.sided") #significative
+assocstats(restecg_Diagnosis_table)
+#Chi-squared test
+res<-chisq.test(restecg_Diagnosis_table)
+res
+res$observed
+res$expected
+res$residuals
+```
+
+We can see how there is an statistical significant difference between the resting cardiographical results and the diagnosis. It seems that having a normal cardiographical result is related to an absence of cardiac disease, while a left ventricular hypertrophy seems to have higher incidence of diagnosed patients.
+
+##### Maximum heart rate achieved (thalach) and Diagnosis of heart disease (num)
+
+For this analysis we will use the subset "data_talach" as we have previously taken out some outliers.
+
+```{r}
+# Descriptive analysis
+by(data_thalach$thalach, data_thalach$num,summary)
+boxplot(thalach ~ num, 
+        data_thalach, main='Boxplot Diagnosis and Maximum heart rate achieved',col=c('lightblue','lightcoral'))
+ggplot(data = data_thalach, aes(x = thalach, fill = num)) + 
+  geom_histogram(alpha = .2, position = "identity", color = "black", bins = 8) + labs(x = "Maximum heart rate achieved", y = "Absolute frequency", title = "Diagnosis of heart disease on Maximum heart rate achieved") +
+  scale_fill_manual(values = c('lightblue', 'lightcoral')) +
+  theme_light()
+
+## T-test
+#Checking normal distribution of the data
+shapiro.test(data_thalach$chol[data_thalach$num=="Absence"]) # Does not follow a normal distribution
+shapiro.test(data_thalach$chol[data_thalach$num=="Presence"]) # Follows a normal distribution
+#Checking the variance
+var.test(thalach~num,data=data_thalach) #Homogeneity of variances
+
+t.test(thalach~num,data=data_thalach,var.equal = TRUE) # There is statistical difference
+```
+
+The statistical tests shows differences between the maximum heart rate achieved and the diagnosis, looking like a positive diagnosis relates with a higher maximum heart rate achieved.
+
+##### Exercise induced angina (exang) and Diagnosis of heart disease (num)
+
+```{r}
+# Absolute Frequences
+exang_Diagnosis_table<-table(heart_disease_dataset$num, heart_disease_dataset$exang)
+(exang_Diagnosis_table_total <- addmargins(exang_Diagnosis_table))
+barplot(exang_Diagnosis_table,
+        col = c('lightblue', 'lightcoral'),
+        beside = TRUE,
+        ylim = c(0, 180), ylab = "Number of observations", main = "Diagnosis depending on Exercise induced angina");legend(x = "topright",legend = unique(heart_disease_dataset$num),  fill = c('lightblue', 'lightcoral'))
+
+#Relative Frequences tables
+(exang_Diagnosis_table_freqs <- prop.table(exang_Diagnosis_table))
+(exang_Diagnosis_table_freqs_total <- addmargins(exang_Diagnosis_table_freqs))
+barplot(exang_Diagnosis_table_freqs,
+        col = c('lightblue', 'lightcoral'),
+        beside = TRUE,
+        ylim = c(0, 1), ylab = "Proportion of observations", main = "Diagnosis depending on Exercise induced angina");legend(x = "topright",legend = unique(heart_disease_dataset$num),  fill = c('lightblue', 'lightcoral'))
+
+#Fisher test
+fisher.test(exang_Diagnosis_table, alternative = "two.sided") #significative
+assocstats(exang_Diagnosis_table)
+#Chi-squared test
+res<-chisq.test(exang_Diagnosis_table)
+res
+res$observed
+res$expected
+res$residuals
+```
+
+Given the results of the statistical tests we can say there is a statistical difference in the diagnosis regarding the exercise induced angina. Not having an Angina implies an absence of heart disease diagnosis while having an angina seems has a higher incidence of diagnosed individuals.
+
+##### ST depression induced by exercise, relative to rest (oldpeak) and Diagnosis of heart disease (num)
+
+```{r}
+# Descriptive analysis
+by(heart_disease_dataset$oldpeak, heart_disease_dataset$num,summary)
+boxplot(oldpeak ~ num, 
+        heart_disease_dataset, main='Boxplot Diagnosis and ST depression',col=c('lightblue','lightcoral'))
+ggplot(data = heart_disease_dataset, aes(x = oldpeak, fill = num)) + 
+  geom_histogram(alpha = .2, position = "identity", color = "black", bins = 8) + labs(x = "ST depression", y = "Absolute frequency", title = "Diagnosis of heart disease on ST depression") +
+  scale_fill_manual(values = c('lightblue', 'lightcoral')) +
+  theme_light()
+
+## T-test
+#Checking normal distribution of the data
+shapiro.test(heart_disease_dataset$oldpeak[heart_disease_dataset$num=="Absence"]) # Does not follow a normal distribution
+shapiro.test(heart_disease_dataset$oldpeak[heart_disease_dataset$num=="Presence"]) # Does not follow a normal distribution
+#Checking the variance
+var.test(oldpeak~num,data=heart_disease_dataset) #no homogeneity of variances
+
+t.test(oldpeak~num,data=heart_disease_dataset,var.equal = FALSE) #there is statistical difference
+
+```
+
+There is an statistical difference between the ST depression induced by exercise, relative to rest when comparing diagnosed and non diagnosed groups of heart disease. It seems that higher number of ST depression induced by exercise imply a higher probability of being diagnosed.
+
+##### Slope of the peak exercise ST segment (slope) and Diagnosis of heart disease (num)
+
+```{r}
+# Absolute Frequences
+slope_Diagnosis_table<-table(heart_disease_dataset$num, heart_disease_dataset$slope)
+(slope_Diagnosis_table_total <- addmargins(slope_Diagnosis_table))
+barplot(slope_Diagnosis_table,
+        col = c('lightblue', 'lightcoral'),
+        beside = TRUE,
+        ylim = c(0, 150), ylab = "Number of observations", main = "Diagnosis depending on the slope of the ST segment");legend(x = "topright",legend = unique(heart_disease_dataset$num),  fill = c('lightblue', 'lightcoral'))
+
+#Relative Frequences tables
+(slope_Diagnosis_table_freqs <- prop.table(slope_Diagnosis_table))
+(slope_Diagnosis_table_freqs_total <- addmargins(slope_Diagnosis_table_freqs))
+barplot(slope_Diagnosis_table_freqs,
+        col = c('lightblue', 'lightcoral'),
+        beside = TRUE,
+        ylim = c(0, 1), ylab = "Proportion of observations", main = "Diagnosis depending on the slope of the ST segment");legend(x = "topright",legend = unique(heart_disease_dataset$num),  fill = c('lightblue', 'lightcoral'))
+
+#Fisher test
+fisher.test(slope_Diagnosis_table, alternative = "two.sided") #significative
+assocstats(slope_Diagnosis_table)
+#Chi-squared test
+res<-chisq.test(slope_Diagnosis_table)
+res
+res$observed
+res$expected
+res$residuals
+```
+
+As we see in the statistical tests, there are significant differences between the groups of the slope of the peak exercise ST segment, when relating them to the diagnosis. Also looking at the residuals we can see that the flat and upsloping groups are the ones contributing the most to the chi-squared results, while Downsloping seems to have a lower impact.
+
+##### Number of major vessels colored by fluoroscopy (ca) and Diagnosis of heart disease (num)
+
+For this analysis we previously created a subset called "data_ca" that does not have 4 individuals from which we did not have the number of major vessels.
+
+```{r}
+# Absolute Frequences
+ca_Diagnosis_table<-table(data_ca$num,data_ca$ca)
+(ca_Diagnosis_table_total <- addmargins(ca_Diagnosis_table))
+barplot(ca_Diagnosis_table,
+        col = c('lightblue', 'lightcoral'),
+        beside = TRUE,
+        ylim = c(0, 120), ylab = "number of observations", main = "Diagnosis depending on number of major vessels");legend(x = "topright",legend = unique(data_ca$num),  fill = c('lightblue', 'lightcoral'))
+
+#Relative Frequences tables
+(ca_Diagnosis_table_freqs <- prop.table(ca_Diagnosis_table))
+(ca_Diagnosis_table_freqs_total <- addmargins(ca_Diagnosis_table_freqs))
+barplot(ca_Diagnosis_table_freqs,
+        col = c('lightblue', 'lightcoral'),
+        beside = TRUE,
+        ylim = c(0, 0.6), ylab = "Proportion of observations", main = "Diagnosis depending on number of major vessels");legend(x = "topright",legend = unique(data_ca$num),  fill = c('lightblue', 'lightcoral'))
+
+#Fisher test
+fisher.test(ca_Diagnosis_table, alternative = "two.sided") #significative
+assocstats(ca_Diagnosis_table)
+#Chi-squared test
+res<-chisq.test(ca_Diagnosis_table)
+res
+res$observed
+res$expected
+res$residuals
+```
+
+The analysis shows there is an statistical difference in diagnosis depending on the number of big vessels, showing having 0 big vessels can be a protecting factor and that having major vessels colored can be a risk factor, having more cases detected. Although it doesn't seem like there is a big difference between having one, two or three major vessels.
+
+##### Thalassemia (thal) and Diagnosis of heart disease (num)
+
+We have to use the subset "data_thal" for this analysis as it is the one that does not have NA's in the variable thal.
+
+```{r}
+# Absolute Frequences
+thal_Diagnosis_table<-table(data_thal$num,data_thal$thal)
+(thal_Diagnosis_table_total <- addmargins(thal_Diagnosis_table))
+barplot(thal_Diagnosis_table,
+        col = c('lightblue', 'lightcoral'),
+        beside = TRUE,
+        ylim = c(0, 150), ylab = "number of observations", main = "Diagnosis depending on Thalassemia");legend(x = "topright",legend = unique(data_thal$num),  fill = c('lightblue', 'lightcoral'))
+
+#Relative Frequences tables
+(thal_Diagnosis_table_freqs <- prop.table(thal_Diagnosis_table))
+(thal_Diagnosis_table_freqs_total <- addmargins(thal_Diagnosis_table_freqs))
+barplot(thal_Diagnosis_table_freqs,
+        col = c('lightblue', 'lightcoral'),
+        beside = TRUE,
+        ylim = c(0, 0.6), ylab = "Proportion of observations", main = "Diagnosis depending on thalassemia");legend(x = "topright",legend = unique(data_thal$num),  fill = c('lightblue', 'lightcoral'))
+
+#Fisher test
+fisher.test(thal_Diagnosis_table, alternative = "two.sided") #significative
+assocstats(thal_Diagnosis_table)
+#Chi-squared test
+res<-chisq.test(thal_Diagnosis_table)
+res
+res$observed
+res$expected
+res$residuals
+```
+
+The analysis shows there is an statistical difference in diagnosis depending on the thalassemia diagnosis. We can see how the biggest difference happens between not having thalassemia (Normal) and having a Reversable defect. We do not see a big impact of being diagnosed with a big defect but this could be because of the small sample size in this group, although it does show an increment in the diagnosis of heart disease as the reversable defect group.
+
+# 2 Difference in mortality rates in hospitalized COVID-19 patients
+
+Using the supplementary material from the [Difference in mortality rates in hospitalized COVID-19 patients identified by cytokine profile clustering using a machine learning approach: An outcome prediction alternative](https://www.frontiersin.org/articles/10.3389/fmed.2022.987182/full), perform the following tasks
+
+## Treatment of the data
+
+```{r}
+#libraries needed
+library(readxl)
+library(ggplot2)
+library(ggpubr)
+library(RColorBrewer)
+library(dplyr)
+library(gridExtra)
+
+
+#Opening both data tables
+Table1 <- read_excel("data/data_ex2/Table1.XLSX", 
+    na = "NI", skip = 1)
+
+View(Table1) 
+```
+
+For many variables, the names had spaces so we removed them. They also had errors like numbers in classified variables.
+
+#### Analyzing age
+
+```{r}
+class(Table1$Age)
+summary(Table1$Age)
+table(is.na(Table1$Age))
+```
+
+Age is correctly defined as numerical, and has a normal range as seen in the summary. Added to this, there are no NAs found.
+
+#### Analyzing NIV
+
+```{r}
+#Renaming the variable so that it does not have spaces
+Table1$useNIV<-Table1$`Use of NIV`
+class(Table1$useNIV)
+table(Table1$useNIV)
+# Taking out value 8 from the NIV variable
+Table1<-Table1[Table1$useNIV !=8,]
+table(Table1$useNIV)
+```
+
+The use of NIV had an 8 instead of No or Yes, so we removed this value.
+
+#### Analyzing AMV
+
+```{r}
+#Renaming the variable so that it does not have spaces
+Table1$useAMV<-Table1$`Use of AMV`
+class(Table1$useAMV)
+table(Table1$useAMV)
+```
+
+The use of AMV is correctly characterized as a character and we see using a table that all values are either Yes or No.
+
+#### Analyzing ARDS
+
+```{r}
+#Renaming the variable so that it does not have spaces
+Table1$Diagnosis_ARDS<-Table1$`ARDS Diagnosis`
+class(Table1$Diagnosis_ARDS)
+table(Table1$Diagnosis_ARDS)
+# Taking out value 8 from the NIV variable
+Table1<-Table1[Table1$Diagnosis_ARDS !=4,]
+table(Table1$Diagnosis_ARDS)
+```
+
+The ARDS diagnosis variable had a 4 instead of No or Yes, so we removed this value.
+
+#### Analyzing Death
+
+```{r}
+table(Table1$Death)
+Table1 <- Table1[Table1$Death != 3, ]   # Taking out the value "3"
+table(Table1$Death)
+```
+
+The Death variable had a 3 instead of No or Yes, so we removed this value.
+
+#### Analyzing Gender
+
+```{r}
+table(Table1$Gender)
+Table1 <- Table1[Table1$Gender != 72, ]
+table(Table1$Gender)
+```
+
+The Gender variable had a 72 instead of F or M, so we removed this value.
+
+#### Analyzing Admission to UCI
+
+```{r}
+#Correcting the mistake in the name
+Table1$Admission_to_UCI<-Table1$`Admission to ICU`
+table(Table1$Admission_to_UCI)
+Table1 <- Table1[Table1$Admission_to_UCI != c("4,5Yes"), ]#taking out 4.5Yes values
+Table1 <- Table1[Table1$Admission_to_UCI != "5.9", ] #taking out 5.9 values
+table(Table1$Admission_to_UCI)
+ 
+```
+
+The Admission to Uci variable had a 4.5Yes value and a 5.9 value instead of No or Yes 2, so we removed this values.
+
+#### Taking out duplicates
+
+```{r}
+#See if any of the IDs are duplicated
+table(Table1$ID)
+Table1[duplicated(Table1$ID), ]
+#Remove the duplicated records based on the ID column
+unique_Table1 <- Table1[!duplicated(Table1$ID), ]
+#Remove the remaining record of the duplicates where the data is not equal between the duplicates, COAG-HSJD-197, COAG-HSJD-222(diff date?), COAG-HSJD-243 (date?), COAG-HSJD-244.
+correct_Table1 <- unique_Table1[!unique_Table1$ID %in% c("COAG-HSJD-197", "COAG-HSJD-222", "COAG-HSJD-243", "COAG-HSJD-244"), ]
+
+```
+
+## Reproduce Figure 1 from the publication
+
+```{r}
+##Reproduction of Figure 1.A: Age barplot
+age_barplot <- hist(correct_Table1$Age, col = "azure2", xlab = "Age (years)", ylab = "Frequency (n)", main = "Age")
+
+## Reproduction of Figure 1.B: Clinical classification table
+#Create the table
+clinical_class <- data.frame(c("Clinical classification", "G1", "G2", "G3", "G4"),
+                              c("NIV", "-","-/+","+", "-/+"),
+                              c("AMV", "-","+/-","-", "+"),
+                              c("ARDS", "-","-","+","+"))
+colnames(clinical_class) <- unlist(clinical_class[1,])
+clinical_class <- clinical_class[-1,]
+#Represent the table with the necessary aesthetic parameters
+class_tab <- ggtexttable(clinical_class,
+                          rows = NULL,
+                          cols = colnames(clinical_class),
+                          vp = NULL,
+                          theme = ttheme(),
+                          )
+#Add a title to the table
+classification_table <- tab_add_title(tab = class_tab, text = "Definition of the clinical classification")
+#Printing the classification table 
+classification_table
+
+## Reproduction of the figure 1.C: Barplot of Groups
+#Add a new column for the clinical classification
+correct_Table1 <- correct_Table1 %>%
+  mutate(
+    Group = case_when(
+      `Use of NIV` == "No" & `Use of AMV` == "No" & `ARDS Diagnosis` == "No" ~ "G1",
+      (`Use of NIV` %in% c("No", "Yes")) & (`Use of AMV` %in% c("No", "Yes")) & `ARDS Diagnosis` == "No" ~ "G2",
+      `Use of NIV` == "Yes" & `Use of AMV` == "No" & `ARDS Diagnosis` == "Yes" ~ "G3",
+      (`Use of NIV` %in% c("No", "Yes")) & `Use of AMV` == "Yes" & `ARDS Diagnosis` == "Yes" ~ "G4",
+      TRUE ~ "Other" 
+    )
+  )
+
+#Create barplot with the specific parameters
+
+# Create table with frequences
+freq_table_Group <- table(correct_Table1$Group)
+
+# Creating the barplot, and capturing the positions of the bars
+Barplot_groups<-text(x=barplot(freq_table_Group, 
+                         xlab = "Clinical classification", 
+                         ylab = "Frequency (n)",
+                         main = "Clinical classification",
+                         col = brewer.pal(4, "Set3"),
+                         ylim = c(0, max(freq_table_Group) + 5)) ,
+     y = as.numeric(freq_table_Group),  
+     labels = as.numeric(freq_table_Group), 
+     pos = 3,  
+     cex = 0.8,  
+     col = "black")
+
+#Reproduction of figure 1.D: Vital status barplot
+table(correct_Table1$Death)
+death_fig <-text( x=barplot(table(correct_Table1$Death), 
+                      xlab =  "Death", ylab = "Frequency (n)",
+                      main = "Vital status",
+                      col = c(brewer.pal(3, "Set3")) ),
+                   y = as.numeric(table(correct_Table1$Death)),  
+     labels = as.numeric(table(correct_Table1$Death)), 
+     pos = 3,  
+     cex = 0.8,  
+     col = "black")
+
+
+```
+
+## Reproduce Figure 2 from the publication
+
+but instead of representing the clusters in the annotation, represent the groups (G1 to G4)
+
+```{r}
+Table_2 <- read_excel("data/data_ex2/Table2.XLSX", col_names = FALSE, na = "NI",skip=1)
+
+#Setting the first column as ID
+names(Table_2)[1]
+colnames(Table_2)[1] <- "ID"
+
+#See if any of the IDs are duplicated
+id_counts <- table(Table_2$ID)
+repeated_ids <- names(id_counts[id_counts > 1])
+print(repeated_ids)
+#"COAG-HSJD-086" "COAG-HSJD-136" are duplicate. Remove both records of the duplicate since the data different between them.
+unique_Table2 <- Table_2[!Table_2$ID %in% c("COAG-HSJD-086", "COAG-HSJD-136"), ]
+library(tidyr)
+extended_Table2 <- unique_Table2 %>% fill(ID , .direction = "down")
+str(extended_Table2)
+table(extended_Table2$ID, useNA = "ifany")
+#In order to classify the records of table 2 by the clinical classification,we need to see if the IDs are the same between tables 1 and 2 
+# IDs in Table1 but not in Table2
+missing_in_Table1 <- correct_Table1$ID[!correct_Table1$ID %in% extended_Table2$ID]
+missing_in_Table1
+
+#Since they are not the same we will remove the Ids from table2 missing in table 1
+pruned_Table2 <- extended_Table2[extended_Table2$ID %in% correct_Table1$ID, ]
+
+#There are Ids with different number of days, we will calculate the values as the median of each set of days for each ID, since that is how they did it in the paper.
+str(pruned_Table2)
+pruned_Table2[, 2:27] <- lapply(pruned_Table2[, 2:27], as.numeric)
+median_Table2 <- pruned_Table2 %>%
+ mutate(ID = as.character(ID)) %>%
+ group_by(ID) %>% 
+ summarise(across(where(is.numeric), median, na.rm = TRUE))
+
+library(mice)
+#Impute the missing values
+imputed_data <- mice(median_Table2)
+summary(imputed_data)
+completed_Table2 <- complete(imputed_data, action = 1)
+
+#Add the column of the clinical classification from Table 1 to the IDs from Table 2
+group_Table2 <- merge(completed_Table2, correct_Table1[, c("ID", "Group")], by = "ID", all.x = TRUE)
+
+#Subset the columns that will be used for the heatmap
+colnames(group_Table2)
+heatmap_table <- group_Table2[, c(1, 28, 3:14)]
+# Fix column names to remove special characters
+colnames(heatmap_table) <- gsub("β", "b", colnames(heatmap_table))
+colnames(heatmap_table) <- gsub("γ", "g", colnames(heatmap_table))
+colnames(heatmap_table) <- gsub("ɑ", "a", colnames(heatmap_table))
+colnames(heatmap_table) #Checking the changes have been performed correctly
+
+# Transpose the data so genes are rows and patients are columns
+heatmap_data <- t(heatmap_table[, 3:14]) # Gene expression matrix
+colnames(heatmap_data) <- heatmap_table$ID  # Assign patient IDs as column names
+
+#Scale the gene expression values
+heatmap_data <-sweep(heatmap_data, 2, colSums(heatmap_data), FUN = "/") * 100
+
+# Prepare the annotation for which Ids are from which groups
+groups_info <- heatmap_table$Group
+annotation <- data.frame(Group = groups_info)
+rownames(annotation) <- heatmap_table$ID  # Ensure rownames of annotation match patient IDs
+
+
+
+library(pheatmap)
+library(RColorBrewer)
+
+pheatmap(
+  heatmap_data,
+  cluster_rows = TRUE,
+  cluster_cols = TRUE,
+  scale = "none",
+  color =  colorRampPalette(c("#FFEBC9", "orange", "darkred"))(50),
+  main = "Relative Expression Heatmap",  
+  annotation_col = annotation,
+  annotation_colors = list( Group = c(G1 = "red", G2 = "green", G3 = "blue", G4 = "yellow", Other = "pink")
+),
+  annotation_legend = FALSE,
+  annotation_names_col = TRUE,
+  show_colnames = FALSE,
+)
+
+
+
+```
+
+## Improve figure 2 of the publication
+
+Add a second annotation with information of deathm and a third one with information of gender
+
+```{r}
+#Add the column of the gender and death from Table 1 to the IDs from Table 2
+all_Table2 <- merge(group_Table2, correct_Table1[, c("ID", "Death", "Gender")], by = "ID", all.x = TRUE)
+
+#Subset the columns that will be used for the heatmap
+colnames(all_Table2)
+all_heatmap_table <- all_Table2[, c(1, 28, 29,30, 3:14)]
+# Fix column names to remove special characters
+colnames(all_heatmap_table) <- gsub("β", "b", colnames(all_heatmap_table))
+colnames(all_heatmap_table) <- gsub("γ", "g", colnames(all_heatmap_table))
+colnames(all_heatmap_table) <- gsub("ɑ", "a", colnames(all_heatmap_table))
+colnames(all_heatmap_table) #Checking the changes have been performed correctly
+
+# Transpose the data so genes are rows and patients are columns
+all_heatmap_data <- t(all_heatmap_table[, 5:16]) # Gene expression matrix
+colnames(all_heatmap_data) <- all_heatmap_table$ID  # Assign patient IDs as column names
+
+#Scale the gene expression values
+all_heatmap_data <-sweep(all_heatmap_data, 2, colSums(all_heatmap_data), FUN = "/") * 100
+
+# Add death and gender columns to the annotation data frame
+groups_info <- all_heatmap_table$Group
+death_info <- all_heatmap_table$Death      
+gender_info <- all_heatmap_table$Gender    
+
+# Create the annotation data frame
+annotation <- data.frame(
+  Group = groups_info,
+  Death = death_info,
+  Gender = gender_info
+)
+rownames(annotation) <- all_heatmap_table$ID  # Ensure rownames match patient IDs
+
+
+pheatmap(
+  all_heatmap_data,
+  cluster_rows = TRUE,          
+  cluster_cols = TRUE,             
+  scale = "none",                   
+  color = colorRampPalette(c("#FFEBC9", "orange", "darkred"))(50),
+  main = "Heatmap with Multiple Annotations", 
+  annotation_col = annotation,      
+  annotation_colors = list(
+    Group = c(G1 = "red", G2 = "green", G3 = "blue", G4 = "yellow", Other = "pink"),
+    Death = c(Yes = "black", No = "gray"),
+    Gender = c(M = "lightblue", F = "pink")), 
+  annotation_legend = FALSE,         
+  annotation_names_col = TRUE,      
+  show_colnames = FALSE            
+)
+
+```
+
+# session info {.unnumbered}
+
+```{r, results='asis',  echo=FALSE, message=FALSE }
+sessionInfo()
+```
