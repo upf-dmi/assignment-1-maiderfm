@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v2
-      - uses: r-lib/actions/setup-r@v1
+      - uses: r-lib/actions/setup-r@v2
       - uses: r-lib/actions/setup-pandoc@v1
       - name: Check Hands_on_I.Rmd
         run: if [ -e Hands_on_I.Rmd ] ; then exit 0 ; else { echo missing Hands_on_I.Rmd ; exit 1 ; } ; fi
